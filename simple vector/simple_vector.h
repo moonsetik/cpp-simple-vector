@@ -1,5 +1,7 @@
 #pragma once
 
+#include "array_ptr.h"
+
 #include <algorithm>
 #include <cassert>
 #include <initializer_list>
@@ -29,43 +31,41 @@ public:
 
     explicit SimpleVector(ReserveProxyObj res) : capacity_(res.capacity) {
         if (capacity_ > 0) {
-            data_ = new Type[capacity_];
+            data_ = ArrayPtr<Type>(capacity_);
         }
     }
 
     SimpleVector(const SimpleVector& other) : size_(other.size_), capacity_(other.size_) {
         if (other.size_ > 0) {
-            data_ = new Type[size_];
-            std::copy(other.begin(), other.end(), data_);
+            data_ = ArrayPtr<Type>(size_);
+            std::copy(other.begin(), other.end(), data_.Get());
         }
     }
 
-    SimpleVector(SimpleVector&& other) noexcept
-        : data_(other.data_), size_(other.size_), capacity_(other.capacity_) {
-        other.data_ = nullptr;
-        other.size_ = 0;
-        other.capacity_ = 0;
+    SimpleVector(SimpleVector&& other) noexcept {
+        swap(other);
     }
 
     SimpleVector& operator=(const SimpleVector& rhs) {
         if (this != &rhs) {
-            SimpleVector temp(rhs);
-            swap(temp);
+            if (rhs.IsEmpty()) {
+                Clear();
+                if (capacity_ > 0) {
+                    data_ = ArrayPtr<Type>();
+                    capacity_ = 0;
+                }
+            }
+            else {
+                SimpleVector temp(rhs);
+                swap(temp);
+            }
         }
         return *this;
     }
 
     SimpleVector& operator=(SimpleVector&& rhs) noexcept {
         if (this != &rhs) {
-            delete[] data_;
-
-            data_ = rhs.data_;
-            size_ = rhs.size_;
-            capacity_ = rhs.capacity_;
-
-            rhs.data_ = nullptr;
-            rhs.size_ = 0;
-            rhs.capacity_ = 0;
+            swap(rhs);
         }
         return *this;
     }
@@ -75,24 +75,21 @@ public:
             return;
         }
 
-        Type* new_data = new Type[new_capacity];
-        std::move(begin(), end(), new_data);
-
-        delete[] data_;
-        data_ = new_data;
+        ArrayPtr<Type> new_data(new_capacity);
+        std::move(begin(), end(), new_data.Get());
+        data_.swap(new_data);
         capacity_ = new_capacity;
     }
 
     void PushBack(const Type& item) {
         if (size_ == capacity_) {
             size_t new_capacity = capacity_ == 0 ? 1 : capacity_ * 2;
-            Type* new_data = new Type[new_capacity];
+            ArrayPtr<Type> new_data(new_capacity);
 
-            std::move(data_, data_ + size_, new_data);
+            std::move(data_.Get(), data_.Get() + size_, new_data.Get());
             new_data[size_] = item;
 
-            delete[] data_;
-            data_ = new_data;
+            data_.swap(new_data);
             capacity_ = new_capacity;
         }
         else {
@@ -104,13 +101,12 @@ public:
     void PushBack(Type&& item) {
         if (size_ == capacity_) {
             size_t new_capacity = capacity_ == 0 ? 1 : capacity_ * 2;
-            Type* new_data = new Type[new_capacity];
+            ArrayPtr<Type> new_data(new_capacity);
 
-            std::move(data_, data_ + size_, new_data);
+            std::move(data_.Get(), data_.Get() + size_, new_data.Get());
             new_data[size_] = std::move(item);
 
-            delete[] data_;
-            data_ = new_data;
+            data_.swap(new_data);
             capacity_ = new_capacity;
         }
         else {
@@ -120,49 +116,49 @@ public:
     }
 
     Iterator Insert(ConstIterator pos, const Type& value) {
-        size_t index = pos - data_;
+        assert(pos >= begin() && pos <= end());
+        size_t index = pos - begin();
 
         if (size_ == capacity_) {
             size_t new_capacity = capacity_ == 0 ? 1 : capacity_ * 2;
-            Type* new_data = new Type[new_capacity];
+            ArrayPtr<Type> new_data(new_capacity);
 
-            std::move(data_, data_ + index, new_data);
+            std::move(begin(), begin() + index, new_data.Get());
             new_data[index] = value;
-            std::move(data_ + index, data_ + size_, new_data + index + 1);
+            std::move(begin() + index, end(), new_data.Get() + index + 1);
 
-            delete[] data_;
-            data_ = new_data;
+            data_.swap(new_data);
             capacity_ = new_capacity;
         }
         else {
-            std::move_backward(data_ + index, data_ + size_, data_ + size_ + 1);
+            std::move_backward(begin() + index, end(), end() + 1);
             data_[index] = value;
         }
         ++size_;
-        return data_ + index;
+        return begin() + index;
     }
 
     Iterator Insert(ConstIterator pos, Type&& value) {
-        size_t index = pos - data_;
+        assert(pos >= begin() && pos <= end());
+        size_t index = pos - begin();
 
         if (size_ == capacity_) {
             size_t new_capacity = capacity_ == 0 ? 1 : capacity_ * 2;
-            Type* new_data = new Type[new_capacity];
+            ArrayPtr<Type> new_data(new_capacity);
 
-            std::move(data_, data_ + index, new_data);
+            std::move(begin(), begin() + index, new_data.Get());
             new_data[index] = std::move(value);
-            std::move(data_ + index, data_ + size_, new_data + index + 1);
+            std::move(begin() + index, end(), new_data.Get() + index + 1);
 
-            delete[] data_;
-            data_ = new_data;
+            data_.swap(new_data);
             capacity_ = new_capacity;
         }
         else {
-            std::move_backward(data_ + index, data_ + size_, data_ + size_ + 1);
+            std::move_backward(begin() + index, end(), end() + 1);
             data_[index] = std::move(value);
         }
         ++size_;
-        return data_ + index;
+        return begin() + index;
     }
 
     void PopBack() noexcept {
@@ -172,41 +168,38 @@ public:
     }
 
     Iterator Erase(ConstIterator pos) {
-        size_t index = pos - data_;
-        std::move(data_ + index + 1, data_ + size_, data_ + index);
+        assert(pos >= begin() && pos < end());
+        size_t index = pos - begin();
+        std::move(begin() + index + 1, end(), begin() + index);
         --size_;
-        return data_ + index;
+        return begin() + index;
     }
 
     void swap(SimpleVector& other) noexcept {
-        std::swap(data_, other.data_);
+        data_.swap(other.data_);
         std::swap(size_, other.size_);
         std::swap(capacity_, other.capacity_);
     }
 
     explicit SimpleVector(size_t size) : size_(size), capacity_(size) {
         if (size > 0) {
-            data_ = new Type[size];
-            std::fill(data_, data_ + size, Type{});
+            data_ = ArrayPtr<Type>(size);
+            std::generate(data_.Get(), data_.Get() + size, [] { return Type{}; });
         }
     }
 
     SimpleVector(size_t size, const Type& value) : size_(size), capacity_(size) {
         if (size > 0) {
-            data_ = new Type[size];
-            std::fill(data_, data_ + size, value);
+            data_ = ArrayPtr<Type>(size);
+            std::fill(data_.Get(), data_.Get() + size, value);
         }
     }
 
     SimpleVector(std::initializer_list<Type> init) : size_(init.size()), capacity_(init.size()) {
         if (size_ > 0) {
-            data_ = new Type[size_];
-            std::copy(init.begin(), init.end(), data_);
+            data_ = ArrayPtr<Type>(size_);
+            std::copy(init.begin(), init.end(), data_.Get());
         }
-    }
-
-    ~SimpleVector() {
-        delete[] data_;
     }
 
     size_t GetSize() const noexcept {
@@ -222,10 +215,12 @@ public:
     }
 
     Type& operator[](size_t index) noexcept {
+        assert(index < size_);
         return data_[index];
     }
 
     const Type& operator[](size_t index) const noexcept {
+        assert(index < size_);
         return data_[index];
     }
 
@@ -250,54 +245,49 @@ public:
     void Resize(size_t new_size) {
         if (new_size <= capacity_) {
             if (new_size > size_) {
-                for (size_t i = size_; i < new_size; i++) {
-                    data_[i] = Type{};
-                }
+                std::generate(begin() + size_, begin() + new_size, [] { return Type{}; });
             }
             size_ = new_size;
             return;
         }
 
         size_t new_capacity = std::max(new_size, capacity_ * 2);
-        Type* new_data = new Type[new_capacity];
+        ArrayPtr<Type> new_data(new_capacity);
 
-        std::move(data_, data_ + size_, new_data);
-        for (size_t i = size_; i < new_size; i++) {
-            new_data[i] = Type{};
-        }
+        std::move(begin(), end(), new_data.Get());
+        std::generate(new_data.Get() + size_, new_data.Get() + new_size, [] { return Type{}; });
 
-        delete[] data_;
-        data_ = new_data;
+        data_.swap(new_data);
         size_ = new_size;
         capacity_ = new_capacity;
     }
 
     Iterator begin() noexcept {
-        return data_;
+        return data_.Get();
     }
 
     Iterator end() noexcept {
-        return data_ + size_;
+        return data_.Get() + size_;
     }
 
     ConstIterator begin() const noexcept {
-        return data_;
+        return data_.Get();
     }
 
     ConstIterator end() const noexcept {
-        return data_ + size_;
+        return data_.Get() + size_;
     }
 
     ConstIterator cbegin() const noexcept {
-        return data_;
+        return data_.Get();
     }
 
     ConstIterator cend() const noexcept {
-        return data_ + size_;
+        return data_.Get() + size_;
     }
 
 private:
-    Type* data_ = nullptr;
+    ArrayPtr<Type> data_;
     size_t size_ = 0;
     size_t capacity_ = 0;
 };
