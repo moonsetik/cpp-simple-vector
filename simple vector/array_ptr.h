@@ -15,6 +15,7 @@ public:
     }
 
     ArrayPtr(const ArrayPtr&) = delete;
+
     ArrayPtr& operator=(const ArrayPtr&) = delete;
 
     ArrayPtr(ArrayPtr&& other) noexcept : data_(other.data_) {

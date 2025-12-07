@@ -29,17 +29,18 @@ public:
 
     SimpleVector() noexcept = default;
 
-    explicit SimpleVector(ReserveProxyObj res) : capacity_(res.capacity) {
-        if (capacity_ > 0) {
-            data_ = ArrayPtr<Type>(capacity_);
-        }
+    explicit SimpleVector(ReserveProxyObj res)
+        : data_(res.capacity)
+        , capacity_(res.capacity)
+    {
     }
 
-    SimpleVector(const SimpleVector& other) : size_(other.size_), capacity_(other.size_) {
-        if (other.size_ > 0) {
-            data_ = ArrayPtr<Type>(size_);
-            std::copy(other.begin(), other.end(), data_.Get());
-        }
+    SimpleVector(const SimpleVector& other)
+        : data_(other.size_)
+        , size_(other.size_)
+        , capacity_(other.size_)
+    {
+        std::copy(other.begin(), other.end(), data_.Get());
     }
 
     SimpleVector(SimpleVector&& other) noexcept {
@@ -50,10 +51,8 @@ public:
         if (this != &rhs) {
             if (rhs.IsEmpty()) {
                 Clear();
-                if (capacity_ > 0) {
-                    data_ = ArrayPtr<Type>();
-                    capacity_ = 0;
-                }
+                data_ = ArrayPtr<Type>();
+                capacity_ = 0;
             }
             else {
                 SimpleVector temp(rhs);
@@ -181,25 +180,28 @@ public:
         std::swap(capacity_, other.capacity_);
     }
 
-    explicit SimpleVector(size_t size) : size_(size), capacity_(size) {
-        if (size > 0) {
-            data_ = ArrayPtr<Type>(size);
-            std::generate(data_.Get(), data_.Get() + size, [] { return Type{}; });
-        }
+    explicit SimpleVector(size_t size)
+        : data_(size)
+        , size_(size)
+        , capacity_(size)
+    {
+        std::generate(data_.Get(), data_.Get() + size, [] { return Type{}; });
     }
 
-    SimpleVector(size_t size, const Type& value) : size_(size), capacity_(size) {
-        if (size > 0) {
-            data_ = ArrayPtr<Type>(size);
-            std::fill(data_.Get(), data_.Get() + size, value);
-        }
+    SimpleVector(size_t size, const Type& value)
+        : data_(size)
+        , size_(size)
+        , capacity_(size)
+    {
+        std::fill(data_.Get(), data_.Get() + size, value);
     }
 
-    SimpleVector(std::initializer_list<Type> init) : size_(init.size()), capacity_(init.size()) {
-        if (size_ > 0) {
-            data_ = ArrayPtr<Type>(size_);
-            std::copy(init.begin(), init.end(), data_.Get());
-        }
+    SimpleVector(std::initializer_list<Type> init)
+        : data_(init.size())
+        , size_(init.size())
+        , capacity_(init.size())
+    {
+        std::copy(init.begin(), init.end(), data_.Get());
     }
 
     size_t GetSize() const noexcept {
