@@ -8,11 +8,7 @@ class ArrayPtr {
 public:
     ArrayPtr() = default;
 
-    explicit ArrayPtr(size_t size) {
-        if (size > 0) {
-            data_ = new Type[size];
-        }
-    }
+    explicit ArrayPtr(size_t size) : data_(new Type[size]) {}
 
     ~ArrayPtr() {
         delete[] data_;
@@ -27,9 +23,7 @@ public:
 
     ArrayPtr& operator=(ArrayPtr&& other) noexcept {
         if (this != &other) {
-            delete[] data_;
-            data_ = other.data_;
-            other.data_ = nullptr;
+            std::swap(data_, other.data_);
         }
         return *this;
     }
